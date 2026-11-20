@@ -1,0 +1,36 @@
+name: Newman signals
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Only send a test message'
+        type: boolean
+        default: false
+concurrency:
+  group: newman
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install playwright && npx playwright install --with-deps chromium
+      - uses: actions/cache/restore@v4
+        with:
+          path: sent.json
+          key: sent-none
+          restore-keys: sent-
+      - run: node scan.mjs ${{ inputs.test && '--test' || '' }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - uses: actions/cache/save@v4
+        with:
+          path: sent.json
+          key: sent-${{ github.run_id }}
