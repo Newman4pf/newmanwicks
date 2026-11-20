@@ -6,7 +6,7 @@ import path from 'node:path';
 const TOKEN = process.env.TELEGRAM_TOKEN, CHAT = process.env.TELEGRAM_CHAT_ID;
 const BASE = process.env.TG_BASE || 'https://api.telegram.org';
 const STATE = process.env.STATE_FILE || 'sent.json';
-const OPEN_MS = +process.env.OPEN_MS || 40000, SCAN_MS = +process.env.SCAN_MS || 100000;
+const OPEN_MS = +process.env.OPEN_MS || 40000, SCAN_MS = +process.env.SCAN_MS || 170000;
 
 if (!TOKEN || !CHAT) { console.error('Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID secret'); process.exit(1); }
 
@@ -53,12 +53,21 @@ await page.addInitScript(() => {
 
 await page.goto('http://localhost:8080/', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(3000);
+// use the Macro desk strategy for every signal
+const strat = await page.evaluate(() => {
+  const s = document.getElementById('strat');
+  s.value = 'macro'; s.dispatchEvent(new Event('change', { bubbles: true })); readCfg();
+  return cfg.strat;
+});
+console.log('strategy:', strat);
 await page.evaluate(() => document.getElementById('go').click());
 await page.waitForFunction(() => typeof opened !== 'undefined' && opened, null, { timeout: OPEN_MS })
   .catch(() => console.log('warning: price feed did not open'));
 await page.evaluate(() => document.getElementById('sgscan').click());
 if (process.env.NB_SIM) await page.evaluate(() => notify('BUY Simulated 15m', 'Entry 100 | SL 99 | TP1 101', 'sim'));
-await page.waitForTimeout(SCAN_MS);
+await page.waitForFunction(() => /^Last scan/.test(document.getElementById('sgstat').textContent), null, { timeout: SCAN_MS })
+  .catch(() => console.log('warning: scan did not finish in time'));
+await page.waitForTimeout(5000);
 
 const fresh = [...found.entries()].filter(([k]) => !sent.includes(k));
 for (const [k, { t, body }] of fresh) {
